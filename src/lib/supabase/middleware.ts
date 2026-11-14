@@ -55,9 +55,16 @@ export async function updateSession(request: NextRequest) {
 
   // Root: send signed-in users to the dashboard, everyone else to login.
   if (pathname === "/") {
-    return NextResponse.redirect(
-      new URL(user ? "/dashboard" : "/login", request.url),
-    );
+    const dest = new URL(user ? "/dashboard" : "/login", request.url);
+    if (!user) {
+      // Supabase redirects FAILED email-link verifications to the Site URL
+      // ("/") with error params — carry the human-readable message to
+      // /login so the user sees why instead of a bare landing page.
+      const errDesc = request.nextUrl.searchParams.get("error_description");
+      const err = request.nextUrl.searchParams.get("error");
+      if (errDesc || err) dest.searchParams.set("error", errDesc ?? err!);
+    }
+    return NextResponse.redirect(dest);
   }
 
   if (!user && isProtected) {

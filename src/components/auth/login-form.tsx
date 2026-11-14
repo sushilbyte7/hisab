@@ -33,6 +33,10 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = React.useState<string | null>(null);
+  const [unconfirmedEmail, setUnconfirmedEmail] = React.useState<string | null>(
+    null,
+  );
+  const [resending, setResending] = React.useState(false);
 
   const next = safeNext(searchParams.get("next"));
   const verified = searchParams.get("verified") === "1";
@@ -43,8 +47,35 @@ export function LoginForm() {
     defaultValues: { email: "", password: "" },
   });
 
+  async function resendVerification(email: string) {
+    setResending(true);
+    try {
+      const supabase = createClient();
+      const { error: resendError } = await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+        },
+      });
+      if (resendError) {
+        toast.error(resendError.message);
+        return;
+      }
+      toast.success("Verification email sent — check your inbox.");
+      setUnconfirmedEmail(null);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not resend the email.",
+      );
+    } finally {
+      setResending(false);
+    }
+  }
+
   async function onSubmit(values: LoginValues) {
     setError(null);
+    setUnconfirmedEmail(null);
     try {
       const supabase = createClient();
       const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -54,6 +85,11 @@ export function LoginForm() {
       if (signInError) {
         setError(signInError.message);
         toast.error(signInError.message);
+        // Unconfirmed accounts can't sign in — offer a fresh link instead
+        // of leaving the user stuck with an expired one.
+        if (/email not confirmed/i.test(signInError.message)) {
+          setUnconfirmedEmail(values.email);
+        }
         return;
       }
       toast.success("Signed in — welcome back.");
@@ -96,6 +132,18 @@ export function LoginForm() {
             <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
             {error}
           </p>
+        )}
+        {unconfirmedEmail && (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={resending}
+            onClick={() => resendVerification(unconfirmedEmail)}
+          >
+            {resending && <Loader2 className="size-4 animate-spin" aria-hidden />}
+            Resend verification email
+          </Button>
         )}
 
         <FormField

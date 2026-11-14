@@ -29,11 +29,37 @@ export function SignupForm() {
   const [submittedEmail, setSubmittedEmail] = React.useState<string | null>(
     null,
   );
+  const [resending, setResending] = React.useState(false);
 
   const form = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
     defaultValues: { full_name: "", email: "", password: "" },
   });
+
+  async function resendVerification(email: string) {
+    setResending(true);
+    try {
+      const supabase = createClient();
+      const { error: resendError } = await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+        },
+      });
+      if (resendError) {
+        toast.error(resendError.message);
+        return;
+      }
+      toast.success("Verification email sent — check your inbox.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not resend the email.",
+      );
+    } finally {
+      setResending(false);
+    }
+  }
 
   async function onSubmit(values: SignupValues) {
     setError(null);
@@ -82,7 +108,20 @@ export function SignupForm() {
           <span className="font-medium text-foreground">{submittedEmail}</span>.
           Click the link to activate your account, then sign in.
         </p>
-        <Button variant="outline" className="w-full" asChild>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Links work once and expire after an hour. If yours expired, send a
+          fresh one below.
+        </p>
+        <Button
+          variant="outline"
+          className="w-full"
+          disabled={resending}
+          onClick={() => resendVerification(submittedEmail)}
+        >
+          {resending && <Loader2 className="size-4 animate-spin" aria-hidden />}
+          Resend verification email
+        </Button>
+        <Button variant="ghost" className="w-full" asChild>
           <Link href="/login">Back to sign in</Link>
         </Button>
       </div>
